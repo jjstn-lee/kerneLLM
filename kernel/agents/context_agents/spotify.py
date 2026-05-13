@@ -1,3 +1,4 @@
+from json import tool
 import os
 import json
 from typing import Optional
@@ -5,19 +6,19 @@ from agents.context_agents import ContextAgent
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import anthropic
+from langchain.tools import tool
 
 class SpotifyClient():
-    def __init__(self):
-        # Initialize Spotify client with OAuth
-        self.sp = spotipy.Spotify(
-            auth_manager=SpotifyOAuth(
-                client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
-                client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET"),
-                redirect_uri=os.environ.get("SPOTIFY_REDIRECT_URI", "http://localhost:8888/callback"),
-                scope="user-top-read user-read-recently-played"
-            )
-        )
-        
+    sp = spotipy.Spotify(
+                auth_manager=SpotifyOAuth(
+                    client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
+                    client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET"),
+                    redirect_uri=os.environ.get("SPOTIFY_REDIRECT_URI", "http://localhost:8888/callback"),
+                    scope="user-top-read user-read-recently-played"
+                )
+    )
+
+    @tool
     def get_top_tracks(self, time_range: str = "medium_term", limit: int = 5) -> list:
         """Get user's top tracks.
 
@@ -41,6 +42,7 @@ class SpotifyClient():
         except Exception as e:
             return [{"error": f"Failed to fetch top tracks: {str(e)}"}]
 
+    @tool
     def get_recent_tracks(self, limit: int = 5) -> list:
         """Get user's recently played tracks.
 
@@ -63,6 +65,7 @@ class SpotifyClient():
         except Exception as e:
             return [{"error": f"Failed to fetch recent tracks: {str(e)}"}]
 
+    @tool
     def get_favorite_genres(self, limit: int = 5) -> list:
         """Get user's favorite genres based on top artists.
 
@@ -85,6 +88,7 @@ class SpotifyClient():
         except Exception as e:
             return [{"error": f"Failed to fetch favorite genres: {str(e)}"}]
 
+    @tool
     def get_top_artists(self, time_range: str = "medium_term", limit: int = 5) -> list:
         """Get user's top artists.
 
@@ -108,6 +112,7 @@ class SpotifyClient():
         except Exception as e:
             return [{"error": f"Failed to fetch top artists: {str(e)}"}]
 
+    @tool
     def get_current_user_profile(self) -> dict:
         """Get current user's profile information.
 
@@ -125,6 +130,7 @@ class SpotifyClient():
         except Exception as e:
             return {"error": f"Failed to fetch user profile: {str(e)}"}
 
+    @tool
     def run(self, prompt: str = "") -> str:
         """Execute the agent with optional user prompt.
 
@@ -159,6 +165,7 @@ class SpotifyClient():
 
         return self._format_output(result)
 
+    @tool
     def _format_output(self, data: dict) -> str:
         """Format the output data into a readable string."""
         output = []
@@ -205,122 +212,7 @@ class SpotifyAgent(ContextAgent):
         self.model = "claude-opus-4-6"
 
     def _create_tools(self):
-        """Create tool definitions from SpotifyClient methods."""
-        return [
-            {
-                "name": "get_current_user_profile",
-                "description": "Get current user's Spotify profile information including display name, followers, and country.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                }
-            },
-            {
-                "name": "get_top_tracks",
-                "description": "Get user's top Spotify tracks for a given time range.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "time_range": {
-                            "type": "string",
-                            "enum": ["long_term", "medium_term", "short_term"],
-                            "description": "Time range: 'long_term' (several years), 'medium_term' (6 months), 'short_term' (4 weeks)"
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Number of tracks to return (1-50)",
-                            "minimum": 1,
-                            "maximum": 50
-                        }
-                    },
-                    "required": []
-                }
-            },
-            {
-                "name": "get_recent_tracks",
-                "description": "Get user's recently played Spotify tracks.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "limit": {
-                            "type": "integer",
-                            "description": "Number of recent tracks to return (1-50)",
-                            "minimum": 1,
-                            "maximum": 50
-                        }
-                    },
-                    "required": []
-                }
-            },
-            {
-                "name": "get_top_artists",
-                "description": "Get user's top Spotify artists for a given time range.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "time_range": {
-                            "type": "string",
-                            "enum": ["long_term", "medium_term", "short_term"],
-                            "description": "Time range: 'long_term' (several years), 'medium_term' (6 months), 'short_term' (4 weeks)"
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Number of artists to return (1-50)",
-                            "minimum": 1,
-                            "maximum": 50
-                        }
-                    },
-                    "required": []
-                }
-            },
-            {
-                "name": "get_favorite_genres",
-                "description": "Get user's favorite music genres based on their top artists.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "limit": {
-                            "type": "integer",
-                            "description": "Number of genres to return",
-                            "minimum": 1,
-                            "maximum": 50
-                        }
-                    },
-                    "required": []
-                }
-            }
-        ]
-
-    def _execute_tool(self, tool_name: str, tool_input: dict) -> str:
-        """Execute a SpotifyClient tool and return the result as JSON."""
-        try:
-            if tool_name == "get_current_user_profile":
-                result = self.spotify_client.get_current_user_profile()
-            elif tool_name == "get_top_tracks":
-                result = self.spotify_client.get_top_tracks(
-                    time_range=tool_input.get("time_range", "medium_term"),
-                    limit=tool_input.get("limit", 5)
-                )
-            elif tool_name == "get_recent_tracks":
-                result = self.spotify_client.get_recent_tracks(
-                    limit=tool_input.get("limit", 5)
-                )
-            elif tool_name == "get_top_artists":
-                result = self.spotify_client.get_top_artists(
-                    time_range=tool_input.get("time_range", "medium_term"),
-                    limit=tool_input.get("limit", 5)
-                )
-            elif tool_name == "get_favorite_genres":
-                result = self.spotify_client.get_favorite_genres(
-                    limit=tool_input.get("limit", 5)
-                )
-            else:
-                return json.dumps({"error": f"Unknown tool: {tool_name}"})
-
-            return json.dumps(result)
-        except Exception as e:
-            return json.dumps({"error": str(e)})
+    # TODO
 
     def run(self, prompt: str) -> str:
         """Execute the agent with a user prompt using Claude API with tool use."""
