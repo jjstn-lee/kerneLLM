@@ -8,27 +8,24 @@ from spotipy.oauth2 import SpotifyOAuth
 import anthropic
 from langchain.tools import tool
 
+from langchain.agents import create_agent
+
+
+
+# Wrapper for Spotify API Interactions
 class SpotifyClient():
-    sp = spotipy.Spotify(
-                auth_manager=SpotifyOAuth(
-                    client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
-                    client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET"),
-                    redirect_uri=os.environ.get("SPOTIFY_REDIRECT_URI", "http://localhost:8888/callback"),
-                    scope="user-top-read user-read-recently-played"
-                )
-    )
+    def __init__(self):
+        self.sp = spotipy.Spotify(
+            auth_manager=SpotifyOAuth(
+                client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
+                client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET"),
+                redirect_uri=os.environ.get("SPOTIFY_REDIRECT_URI", "http://localhost:8888/callback"),
+                scope="user-top-read user-read-recently-played"
+            )
+        )
 
-    @tool
+    
     def get_top_tracks(self, time_range: str = "medium_term", limit: int = 5) -> list:
-        """Get user's top tracks.
-
-        Args:
-            time_range: 'long_term' (several years), 'medium_term' (6 months), 'short_term' (4 weeks)
-            limit: Number of tracks to return (1-50)
-
-        Returns:
-            List of track information
-        """
         try:
             results = self.sp.current_user_top_tracks(time_range=time_range, limit=limit)
             return [
@@ -42,16 +39,9 @@ class SpotifyClient():
         except Exception as e:
             return [{"error": f"Failed to fetch top tracks: {str(e)}"}]
 
-    @tool
+    
     def get_recent_tracks(self, limit: int = 5) -> list:
-        """Get user's recently played tracks.
 
-        Args:
-            limit: Number of recent tracks to return (1-50)
-
-        Returns:
-            List of recently played track information
-        """
         try:
             results = self.sp.current_user_recently_played(limit=limit)
             return [
@@ -65,16 +55,9 @@ class SpotifyClient():
         except Exception as e:
             return [{"error": f"Failed to fetch recent tracks: {str(e)}"}]
 
-    @tool
+    
     def get_favorite_genres(self, limit: int = 5) -> list:
-        """Get user's favorite genres based on top artists.
 
-        Args:
-            limit: Number of genres to return
-
-        Returns:
-            List of favorite genres with counts
-        """
         try:
             results = self.sp.current_user_top_artists(limit=50, time_range="medium_term")
             genre_counts = {}
@@ -88,17 +71,9 @@ class SpotifyClient():
         except Exception as e:
             return [{"error": f"Failed to fetch favorite genres: {str(e)}"}]
 
-    @tool
+    
     def get_top_artists(self, time_range: str = "medium_term", limit: int = 5) -> list:
-        """Get user's top artists.
 
-        Args:
-            time_range: 'long_term', 'medium_term', or 'short_term'
-            limit: Number of artists to return (1-50)
-
-        Returns:
-            List of top artist information
-        """
         try:
             results = self.sp.current_user_top_artists(time_range=time_range, limit=limit)
             return [
@@ -112,13 +87,9 @@ class SpotifyClient():
         except Exception as e:
             return [{"error": f"Failed to fetch top artists: {str(e)}"}]
 
-    @tool
+    
     def get_current_user_profile(self) -> dict:
-        """Get current user's profile information.
 
-        Returns:
-            User profile data
-        """
         try:
             user = self.sp.current_user()
             return {
@@ -130,142 +101,72 @@ class SpotifyClient():
         except Exception as e:
             return {"error": f"Failed to fetch user profile: {str(e)}"}
 
-    @tool
-    def run(self, prompt: str = "") -> str:
-        """Execute the agent with optional user prompt.
-
-        Args:
-            prompt: User's request for Spotify data
-
-        Returns:
-            Formatted string with requested Spotify information
-        """
-        prompt_lower = prompt.lower()
-        result = {}
-
-        # Default: return overview of user's Spotify data
-        if not prompt or "overview" in prompt_lower:
-            result["profile"] = self.get_current_user_profile()
-            result["top_tracks"] = self.get_top_tracks()
-            result["top_artists"] = self.get_top_artists()
-            result["favorite_genres"] = self.get_favorite_genres()
-
-        # Handle specific requests
-        if "recent" in prompt_lower or "recently" in prompt_lower:
-            result["recent_tracks"] = self.get_recent_tracks()
-
-        if "top track" in prompt_lower:
-            result["top_tracks"] = self.get_top_tracks()
-
-        if "top artist" in prompt_lower:
-            result["top_artists"] = self.get_top_artists()
-
-        if "genre" in prompt_lower:
-            result["favorite_genres"] = self.get_favorite_genres()
-
-        return self._format_output(result)
-
-    @tool
-    def _format_output(self, data: dict) -> str:
-        """Format the output data into a readable string."""
-        output = []
-
-        if "profile" in data and data["profile"]:
-            profile = data["profile"]
-            if "error" not in profile:
-                output.append(f"👤 User: {profile.get('display_name', 'Unknown')}")
-                output.append(f"   Followers: {profile.get('followers', 0)}")
-                if profile.get("country"):
-                    output.append(f"   Country: {profile['country']}")
-
-        if "top_tracks" in data and data["top_tracks"]:
-            output.append("\n🎵 Top Tracks:")
-            for i, track in enumerate(data["top_tracks"][:5], 1):
-                if "error" not in track:
-                    output.append(f"   {i}. {track['name']} - {track['artist']} ({track['popularity']}% popularity)")
-
-        if "top_artists" in data and data["top_artists"]:
-            output.append("\n🎤 Top Artists:")
-            for i, artist in enumerate(data["top_artists"][:5], 1):
-                if "error" not in artist:
-                    output.append(f"   {i}. {artist['name']} ({artist['popularity']}% popularity)")
-
-        if "favorite_genres" in data and data["favorite_genres"]:
-            output.append("\n🎸 Favorite Genres:")
-            for i, genre_info in enumerate(data["favorite_genres"][:5], 1):
-                if "error" not in genre_info:
-                    output.append(f"   {i}. {genre_info['genre']} (appears in {genre_info['count']} artist(s))")
-
-        if "recent_tracks" in data and data["recent_tracks"]:
-            output.append("\n⏰ Recently Played:")
-            for i, track in enumerate(data["recent_tracks"][:5], 1):
-                if "error" not in track:
-                    output.append(f"   {i}. {track['name']} - {track['artist']}")
-
-        return "\n".join(output) if output else "No Spotify data available."
 
 class SpotifyAgent(ContextAgent):
-    def __init__(self, id: str, system_prompt: str = "", kb: Optional[dict] = None):
-        super().__init__(id, system_prompt, kb)
-        self.client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-        self.spotify_client = SpotifyClient()
-        self.model = "claude-opus-4-6"
+    # Tools are wrappers over the SpotifyCLient functions that interact with the Spotify API.
+    @tool
+    def get_top_tracks(self, time_range, limit) -> list:
+        """Get user's top tracks.
+        Args:
+            time_range: 'long_term' (several years), 'medium_term' (6 months), 'short_term' (4 weeks)
+            limit: Number of tracks to return (1-50)
+        Returns:
+            List of track information
+        """
+        return self.spotify_client.get_top_tracks(time_range=time_range, limit=limit)
+    
+    @tool
+    def get_recent_tracks(self, limit) -> list:
+        """Get user's recently played tracks.
+        Args:
+            limit: Number of recent tracks to return (1-50)
 
-    def _create_tools(self):
-    # TODO
+        Returns:
+            List of recently played track information
+        """
+        return self.spotify_client.get_recent_tracks(limit=limit)
+    
+    @tool
+    def get_favorite_genres(self, limit) -> list:
+        """Get user's favorite genres based on top artists.
+        Args:
+            limit: Number of genres to return
 
-    def run(self, prompt: str) -> str:
-        """Execute the agent with a user prompt using Claude API with tool use."""
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
+        Returns:
+            List of favorite genres with counts
+        """
+        return self.spotify_client.get_favorite_genres(limit=limit)
+    
+    @tool
+    def get_top_artists(self, time_range, limit) -> list:
+        """Get user's top artists.
+        Args:
+            time_range: 'long_term', 'medium_term', or 'short_term'
+            limit: Number of artists to return (1-50)
 
-        system_prompt = self.system_prompt or (
-            "You are a helpful Spotify assistant. Use the available tools to help users "
-            "explore their Spotify listening habits, top tracks, artists, and genres. "
-            "Provide insightful analysis and recommendations based on the data."
+        Returns:
+            List of top artist information
+        """
+        return self.spotify_client.get_top_artists(time_range=time_range, limit=limit)
+    
+    @tool
+    def get_current_user_profile(self) -> dict:
+        """Get current user's profile information.
+        Returns:
+            User profile data
+        """
+        return self.spotify_client.get_current_user_profile()
+
+    def __init__(self):
+        self.agent = create_agent(
+            model="claude-opus-4-6",
+            tools=[self.get_top_tracks, self.get_recent_tracks, self.get_favorite_genres, self.get_top_artists, self.get_current_user_profile],
+            system_prompt=self.system_prompt
         )
 
-        while True:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=1024,
-                system=system_prompt,
-                tools=self._create_tools(),
-                messages=messages
-            )
-
-            # Check if Claude is done (no more tool calls)
-            if response.stop_reason == "end_turn":
-                # Extract final text response
-                for block in response.content:
-                    if block.type == "text":
-                        return block.text
-                return "No response generated."
-
-            # If Claude wants to use tools
-            if response.stop_reason == "tool_use":
-                # Add assistant's response to messages
-                messages.append({"role": "assistant", "content": response.content})
-
-                # Execute tools and collect results
-                tool_results = []
-                for block in response.content:
-                    if block.type == "tool_use":
-                        tool_result = self._execute_tool(block.name, block.input)
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": tool_result
-                        })
-
-                # Add tool results as user message
-                messages.append({"role": "user", "content": tool_results})
-            else:
-                # Unexpected stop reason, return what we have
-                for block in response.content:
-                    if block.type == "text":
-                        return block.text
-                return "Unexpected response from model."
+        self.spotify_client = SpotifyClient()
 
     
+
+
+
