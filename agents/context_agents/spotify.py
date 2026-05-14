@@ -9,7 +9,7 @@ import anthropic
 from langchain.tools import tool
 
 from langchain.agents import create_agent
-
+from langchain_core.tools import StructuredTool
 
 
 # Wrapper for Spotify API Interactions
@@ -23,9 +23,23 @@ class SpotifyClient():
                 scope="user-top-read user-read-recently-played"
             )
         )
+        self.tools = [
+            StructuredTool.from_function(func=self.get_top_tracks),
+            StructuredTool.from_function(func=self.get_recent_tracks),
+            StructuredTool.from_function(func=self.get_favorite_genres),
+            StructuredTool.from_function(func=self.get_top_artists),
+            StructuredTool.from_function(func=self.get_current_user_profile)
+        ]
 
     
     def get_top_tracks(self, time_range: str = "medium_term", limit: int = 5) -> list:
+        """Get user's top tracks.
+        Args:
+            time_range: 'long_term' (several years), 'medium_term' (6 months), 'short_term' (4 weeks)
+            limit: Number of tracks to return (1-50)
+        Returns:
+            List of track information
+        """
         try:
             results = self.sp.current_user_top_tracks(time_range=time_range, limit=limit)
             return [
@@ -41,7 +55,13 @@ class SpotifyClient():
 
     
     def get_recent_tracks(self, limit: int = 5) -> list:
+        """Get user's recently played tracks.
+        Args:
+            limit: Number of recent tracks to return (1-50)
 
+        Returns:
+            List of recently played track information
+        """
         try:
             results = self.sp.current_user_recently_played(limit=limit)
             return [
@@ -57,7 +77,13 @@ class SpotifyClient():
 
     
     def get_favorite_genres(self, limit: int = 5) -> list:
+        """Get user's favorite genres based on top artists.
+        Args:
+            limit: Number of genres to return
 
+        Returns:
+            List of favorite genres with counts
+        """
         try:
             results = self.sp.current_user_top_artists(limit=50, time_range="medium_term")
             genre_counts = {}
@@ -73,7 +99,14 @@ class SpotifyClient():
 
     
     def get_top_artists(self, time_range: str = "medium_term", limit: int = 5) -> list:
+        """Get user's top artists.
+        Args:
+            time_range: 'long_term', 'medium_term', or 'short_term'
+            limit: Number of artists to return (1-50)
 
+        Returns:
+            List of top artist information
+        """
         try:
             results = self.sp.current_user_top_artists(time_range=time_range, limit=limit)
             return [
@@ -89,7 +122,10 @@ class SpotifyClient():
 
     
     def get_current_user_profile(self) -> dict:
-
+        """Get current user's profile information.
+        Returns:
+            User profile data
+        """
         try:
             user = self.sp.current_user()
             return {
@@ -158,15 +194,11 @@ class SpotifyAgent(ContextAgent):
         return self.spotify_client.get_current_user_profile()
 
     def __init__(self):
+        self.spotify_client = SpotifyClient()
         self.agent = create_agent(
             model="claude-opus-4-6",
-            tools=[self.get_top_tracks, self.get_recent_tracks, self.get_favorite_genres, self.get_top_artists, self.get_current_user_profile],
-            system_prompt=self.system_prompt
+            tools=self.spotify_client.tools,
+            # system_prompt=self.system_prompt
         )
 
-        self.spotify_client = SpotifyClient()
-
-    
-
-
-
+        

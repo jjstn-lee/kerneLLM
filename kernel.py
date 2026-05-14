@@ -1,11 +1,13 @@
 from dotenv import load_dotenv
 from pathlib import Path
+import os
+
+from langchain.messages import HumanMessage
 
 # need to override path bce of Claude Code :/
 env_path = Path(__file__).parent / ".env"
 load_dotenv(env_path, override=True)
 
-import os
 print("ANTHROPIC_API_KEY:", os.environ.get("ANTHROPIC_API_KEY"))
 
 from agents.context_agents.spotify import SpotifyAgent
@@ -24,6 +26,10 @@ def run(agent):
 
 
 if __name__ == "__main__":
-    agent = SpotifyAgent(id="spotify-overview", system_prompt="", kb=None)
+    spotify_agent = SpotifyAgent()
     print("🎵 Fetching your Spotify overview…\n")
-    print(agent.run())
+    spotify_agent.agent.invoke(
+        {"messages": [HumanMessage(content="What are my top tracks?")]}
+
+    )
+    
